@@ -1,0 +1,132 @@
+/*
+Name: Lydianne A. Rivera Cordero
+Course: CNT 4714 Spring 2026
+Assignment title: Project 2 – Multi-threaded programming in Java
+Date: February 15, 2026
+
+Class: Yard
+
+Description:
+
+*/
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+public class Yard {
+
+    private static final int MAX_TRAINS = 30;
+    private static final int MAX_SWITCHES = 10;
+
+    public static void main(String[] args) throws Exception {
+
+        System.out.println("$ $ $ TRAIN MOVEMENT SIMULATION BEGINS……….. $ $ $");
+        System.out.println();
+
+
+        // If your csv files are in src/, these paths work:
+        String fleetPath = "src/theFleetFile.csv";
+        String yardPath  = "src/theYardFile.csv";
+
+        Map<String, int[]> routes = loadRoutes(yardPath);
+
+        Switch[] switches = new Switch[MAX_SWITCHES + 1];
+        for (int i = 1; i <= MAX_SWITCHES; i++) {
+            switches[i] = new Switch(i);
+        }
+
+        List<Train> trains = loadFleet(fleetPath, routes, switches);
+
+        ExecutorService pool = Executors.newFixedThreadPool(MAX_TRAINS);
+        for (Train t : trains) {
+            pool.execute(t);
+        }
+
+        pool.shutdown();
+        pool.awaitTermination(5, TimeUnit.MINUTES);
+
+        System.out.println("$ $ $ SIMULATION ENDS $ $ $");
+        System.out.println();
+
+        printFinalReport(trains);
+    }
+
+    private static Map<String, int[]> loadRoutes(String yardPath) throws Exception {
+        Map<String, int[]> routes = new HashMap<>();
+
+        try (BufferedReader br = new BufferedReader(new FileReader(yardPath))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+
+                String[] p = line.split(",");
+                int inbound = Integer.parseInt(p[0].trim());
+                int s1 = Integer.parseInt(p[1].trim());
+                int s2 = Integer.parseInt(p[2].trim());
+                int s3 = Integer.parseInt(p[3].trim());
+                int outbound = Integer.parseInt(p[4].trim());
+
+                routes.put(inbound + "-" + outbound, new int[]{s1, s2, s3});
+            }
+        }
+
+        return routes;
+    }
+
+    private static List<Train> loadFleet(String fleetPath, Map<String, int[]> routes, Switch[] switches) throws Exception {
+        List<Train> trains = new ArrayList<>();
+
+        try (BufferedReader br = new BufferedReader(new FileReader(fleetPath))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+
+                String[] p = line.split(",");
+                int trainId = Integer.parseInt(p[0].trim());
+                int inbound = Integer.parseInt(p[1].trim());
+                int outbound = Integer.parseInt(p[2].trim());
+
+                String key = inbound + "-" + outbound;
+
+                if (!routes.containsKey(key)) {
+                    trains.add(new Train(trainId, inbound, outbound, true, 0, 0, 0, switches));
+                } else {
+                    int[] sw = routes.get(key);
+                    trains.add(new Train(trainId, inbound, outbound, false, sw[0], sw[1], sw[2], switches));
+                }
+            }
+        }
+
+        return trains;
+    }
+
+    private static void printFinalReport(List<Train> trains) {
+        System.out.println("\nFINAL TRAIN STATUS REPORT");
+        System.out.println("Train  In  Out  S1  S2  S3  Hold  Dispatched  DispatchSeq");
+        System.out.println("--------------------------------------------------------");
+
+        trains.sort(Comparator.comparingInt(Train::getId));
+
+        for (Train t : trains) {
+            String s1 = t.isPermanentHold() ? "-" : String.valueOf(t.getA());
+            String s2 = t.isPermanentHold() ? "-" : String.valueOf(t.getB());
+            String s3 = t.isPermanentHold() ? "-" : String.valueOf(t.getC());
+
+            System.out.printf(
+                    "%5d %3d %4d %3s %3s %3s %5s %10s %11d%n",
+                    t.getId(),
+                    t.getInbound(),
+                    t.getOutbound(),
+                    s1, s2, s3,
+                    t.isPermanentHold(),
+                    t.isDispatched(),
+                    t.getDispatchSeq()
+            );
+        }
+    }
+}
