@@ -1,0 +1,152 @@
+
+/*
+Name: Lydianne A. Rivera Cordero
+Course: CNT 4714 Spring 2026
+Assignment title: Project 2 – Multi-threaded Programming in Java
+Date: February 15, 2026
+Class: Train
+
+Description:
+
+*/
+
+
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class Train implements Runnable {
+
+    private static final AtomicInteger DISPATCH_ORDER = new AtomicInteger(1);
+
+    private final int id;
+    private final int inbound;
+    private final int outbound;
+
+    private final boolean permanentHold;
+
+    // switch ids we need (only meaningful if not on hold)
+    private final int a, b, c;
+
+    private final Switch[] yardSwitches;
+
+    private boolean dispatched = false;
+    private int dispatchSeq = 0;
+
+    public Train(int id, int inbound, int outbound,
+                 boolean permanentHold,
+                 int a, int b, int c,
+                 Switch[] yardSwitches) {
+
+        this.id = id;
+        this.inbound = inbound;
+        this.outbound = outbound;
+        this.permanentHold = permanentHold;
+
+        this.a = a;
+        this.b = b;
+        this.c = c;
+
+        this.yardSwitches = yardSwitches;
+    }
+
+    @Override
+    public void run() {
+        if (permanentHold) {
+            System.out.println("*************");
+            System.out.println("Train " + id + " is on permanent hold and cannot be dispatched.");
+            System.out.println("*************");
+            return;
+        }
+
+        // keep trying until we successfully move through the yard once
+        while (!dispatched) {
+            tryMoveOnce();
+        }
+    }
+
+    private void tryMoveOnce() {
+        // --- switch A ---
+        if (!yardSwitches[a].tryLock()) {
+            System.out.println("Train " + id + ": UNABLE TO LOCK first required switch: Switch " + a + ". Train will wait...");
+            pauseBeforeRetry();
+            return;
+        }
+        System.out.println("Train " + id + ": LOCKS first required Switch " + a + ".");
+        System.out.println();
+
+        // --- switch B ---
+        if (!yardSwitches[b].tryLock()) {
+            System.out.println("Train " + id + ": UNABLE TO LOCK second required switch: Switch " + b + ".");
+            System.out.println("Train " + id + ": Releasing lock on first required switch: Switch " + a + ". Train will wait...");
+            yardSwitches[a].unlockIfHeld();
+            pauseBeforeRetry();
+            return;
+        }
+        System.out.println("Train " + id + ": LOCKS second required Switch " + b + ".");
+        System.out.println();
+
+        // --- switch C ---
+        if (!yardSwitches[c].tryLock()) {
+            System.out.println("Train " + id + ": UNABLE TO LOCK third required switch: Switch " + c + ".");
+            System.out.println("Train " + id + ": Releasing locks on first and second required switches: Switch " + a + " and Switch " + b + ". Train will wait...");
+            yardSwitches[b].unlockIfHeld();
+            yardSwitches[a].unlockIfHeld();
+            pauseBeforeRetry();
+            return;
+        }
+        System.out.println("Train " + id + ": LOCKS third required Switch " + c + ".");
+        System.out.println();
+
+        // got everything
+        System.out.println("Train " + id + ": HOLDS ALL NEEDED SWITCH LOCKS - Train movement begins.");
+        System.out.println();
+
+        simulateMovingThroughYard();
+
+        System.out.println("Train " + id + ": Clear of yard control.");
+        System.out.println("Train " + id + ": Releasing all switch locks.");
+        System.out.println("Train " + id + ": Unlocks/releases lock on Switch " + a + ".");
+        System.out.println("Train " + id + ": Unlocks/releases lock on Switch " + b + ".");
+        System.out.println("Train " + id + ": Unlocks/releases lock on Switch " + c + ".");
+
+        // release in reverse order (habit)
+        yardSwitches[c].unlockIfHeld();
+        yardSwitches[b].unlockIfHeld();
+        yardSwitches[a].unlockIfHeld();
+
+        dispatched = true;
+        dispatchSeq = DISPATCH_ORDER.getAndIncrement();
+
+        System.out.println("Train " + id + ": Has been dispatched and moves on down the line out of yard control into CTC.");
+        System.out.println("@ @ @ TRAIN " + id + ": DISPATCHED @ @ @");
+        System.out.println();
+
+    }
+
+    private void pauseBeforeRetry() {
+        try {
+            Thread.sleep(ThreadLocalRandom.current().nextInt(100, 400));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void simulateMovingThroughYard() {
+        try {
+            Thread.sleep(ThreadLocalRandom.current().nextInt(300, 700));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    // getters for final report
+    public int getId() { return id; }
+    public int getInbound() { return inbound; }
+    public int getOutbound() { return outbound; }
+    public boolean isPermanentHold() { return permanentHold; }
+    public boolean isDispatched() { return dispatched; }
+    public int getDispatchSeq() { return dispatchSeq; }
+    public int getA() { return a; }
+    public int getB() { return b; }
+    public int getC() { return c; }
+}
